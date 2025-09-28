@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "esp_smartconfig.h"
 
+#include "store.hpp"
+
 #define TAG "smart_config:wifi"
 
 typedef ip_event_got_ip_t *ip_event_got_ip_handle_t;
@@ -62,6 +64,7 @@ static void wifi_handler(void *event_handler_arg,
         ESP_LOGI(TAG, "wifi station start");
         // 判断是否需要配网
         // Start smart config
+        // nvs got ssid and password
         xTaskCreate(smart_config_task, "smartconfig_task", 4096, NULL, 3, NULL);
         break;
     case WIFI_EVENT_STA_CONNECTED:
@@ -99,18 +102,23 @@ static void smart_config_handler(void *event_handler_arg,
     {
         ESP_LOGI(TAG, "Smartconfig got ssid and pswd");
         smartconfig_event_got_ssid_pswd_t *pSmartConfig = (smartconfig_event_got_ssid_pswd_t *)event_data;
-        uint8_t ssid[33] = {0};
-        uint8_t pwd[65] = {0};
+        store::wifi_info_t info;
+
         uint8_t cellphone_ip[4];
         wifi_config_t conf;
+        bzero(&info, sizeof(store::wifi_info_t));
         bzero(&conf, sizeof(wifi_config_t));
-        memcpy(ssid, pSmartConfig->ssid, sizeof(pSmartConfig->ssid));
-        memcpy(pwd, pSmartConfig->password, sizeof(pSmartConfig->password));
+        memcpy(info.ssid, pSmartConfig->ssid, sizeof(pSmartConfig->ssid));
+        memcpy(info.pwd, pSmartConfig->password, sizeof(pSmartConfig->password));
         memcpy(cellphone_ip, pSmartConfig->cellphone_ip, sizeof(pSmartConfig->cellphone_ip));
 
-        ESP_LOGI(TAG, "ssid : %s ; pwd : %s", ssid, pwd);
+        ESP_LOGI(TAG, "ssid : %s ; pwd : %s", info.ssid, info.pwd);
         ESP_LOGI(TAG, "Receive from : %d.%d.%d.%d", cellphone_ip[0], cellphone_ip[1], cellphone_ip[2], cellphone_ip[3]);
-
+        auto res = store::set_wifi_info(&info);
+        if(res != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Strore wifi info error");
+        }
         memcpy(conf.sta.ssid, pSmartConfig->ssid, sizeof(conf.sta.ssid));
         memcpy(conf.sta.password, pSmartConfig->password, sizeof(conf.sta.password));
 

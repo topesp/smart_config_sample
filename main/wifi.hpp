@@ -7,5 +7,4 @@ extern EventGroupHandle_t wifiEventGroupHandle;
 
 void wifi_task(void *);
 
-
 #endif
