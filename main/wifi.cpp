@@ -34,6 +34,8 @@ static void smart_config_handler(void *event_handler_arg,
 
 static void smart_config_task(void *);
 
+static void wifi_connect(store::wifi_info_t &);
+
 void wifi_task(void *)
 {
     esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
@@ -58,6 +60,8 @@ static void wifi_handler(void *event_handler_arg,
                          int32_t event_id,
                          void *event_data)
 {
+    store::wifi_info info;
+    esp_err_t err;
     switch (event_id)
     {
     case WIFI_EVENT_STA_START:
@@ -65,7 +69,17 @@ static void wifi_handler(void *event_handler_arg,
         // 判断是否需要配网
         // Start smart config
         // nvs got ssid and password
-        xTaskCreate(smart_config_task, "smartconfig_task", 4096, NULL, 3, NULL);
+        bzero(&info,sizeof(store::wifi_info));
+        err = store::got_wifi_info(&info);
+        if(err == ESP_OK)
+        {
+            wifi_connect(info);
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Can not found wifi-info,Start smart config");
+            xTaskCreate(smart_config_task, "smartconfig_task", 4096, NULL, 3, NULL);
+        }
         break;
     case WIFI_EVENT_STA_CONNECTED:
         ESP_LOGI(TAG, "wifi station connected");
@@ -105,9 +119,7 @@ static void smart_config_handler(void *event_handler_arg,
         store::wifi_info_t info;
 
         uint8_t cellphone_ip[4];
-        wifi_config_t conf;
         bzero(&info, sizeof(store::wifi_info_t));
-        bzero(&conf, sizeof(wifi_config_t));
         memcpy(info.ssid, pSmartConfig->ssid, sizeof(pSmartConfig->ssid));
         memcpy(info.pwd, pSmartConfig->password, sizeof(pSmartConfig->password));
         memcpy(cellphone_ip, pSmartConfig->cellphone_ip, sizeof(pSmartConfig->cellphone_ip));
@@ -119,12 +131,7 @@ static void smart_config_handler(void *event_handler_arg,
         {
             ESP_LOGE(TAG, "Strore wifi info error");
         }
-        memcpy(conf.sta.ssid, pSmartConfig->ssid, sizeof(conf.sta.ssid));
-        memcpy(conf.sta.password, pSmartConfig->password, sizeof(conf.sta.password));
-
-        ESP_ERROR_CHECK(esp_wifi_disconnect());
-        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &conf));
-        esp_wifi_connect();
+        wifi_connect(info);
     }
     else if (event_id == SC_EVENT_SEND_ACK_DONE)
     {
@@ -159,4 +166,19 @@ static void smart_config_task(void *pvParameters)
             vTaskDelete(NULL);
         }
     }
+}
+
+static void wifi_connect(store::wifi_info_t &wifi)
+{
+    wifi_config_t conf;
+    bzero(&conf, sizeof(wifi_config_t));
+
+    memcpy(conf.sta.ssid, wifi.ssid, sizeof(conf.sta.ssid));
+    memcpy(conf.sta.password, wifi.pwd, sizeof(conf.sta.password));
+
+    ESP_ERROR_CHECK(esp_wifi_disconnect());
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &conf));
+    esp_wifi_connect();
+    
+
 }
